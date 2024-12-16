@@ -1,0 +1,31 @@
+---
+title: "2015_Nature_Verification_GO"
+output: html_document
+date: "2024-12-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+---
+title: "Gene Ontology Analysis for WT p53 or GOF p53 Binding Sites"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Load necessary libraries
+library(clusterProfiler)
+library(org.Mm.eg.db) # Use org.Hs.eg.db for human genes
+
+
+```
+
+```{r}
+# Load the list of gene symbols extracted from HOMER output
+gene_list_file <- "gene_list.txt"
+gene_list <- readLines(gene_list_file)
+
+# Display the number of genes
+cat("Number of genes for GO analysis:", length(gene_list))
+
+```
