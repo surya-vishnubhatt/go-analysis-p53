@@ -4,9 +4,6 @@ output: html_document
 date: "2024-12-11"
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 ---
 title: "Gene Ontology Analysis for WT p53 or GOF p53 Binding Sites"
 output: html_document
@@ -16,16 +13,56 @@ output: html_document
 # Load necessary libraries
 library(clusterProfiler)
 library(org.Mm.eg.db) # Use org.Hs.eg.db for human genes
-
-
+library(TxDb.Mmusculus.UCSC.mm9.knownGene)
 ```
 
 ```{r}
 # Load the list of gene symbols extracted from HOMER output
 gene_list_file <- "gene_list.txt"
 gene_list <- readLines(gene_list_file)
-
 # Display the number of genes
 cat("Number of genes for GO analysis:", length(gene_list))
+```
 
+```{r}
+transcript_id <- "transID.txt"
+rna_transcripts <- readLines(transcript_id)
+cat("Number of RNA transcripts associoated with ChIP-seq TSS proximal peaks:", length(rna_transcripts))
+```
+
+```{r}
+library(biomaRt)
+
+mart <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+
+# Convert transcript IDs to Ensembl IDs
+converted_genes <- getBM(
+  attributes = c("refseq_mrna", "ensembl_gene_id"),
+  filters = "refseq_mrna",
+  values = rna_transcripts,
+  mart = mart
+)
+trans_to_ensembl <- converted_genes$ensembl_gene_id
+```
+
+```{r}
+ensembl_id <- "ensembl_ids.txt"
+ensembl_ids <- readLines(ensembl_id)
+cat("ChIP-seq TSS proximal peaks associated with the nearest ENSEMBL by Zhu et al:", length(ensembl_ids))
+```
+
+```{r}
+# Perform GO enrichment analysis
+go_results <- enrichGO(
+  gene          = ensembl_ids,   # List of Ensembl transcript IDs
+  OrgDb         = TxDb.Mmusculus.UCSC.mm9.knownGene,  # Mouse genome annotations
+  keyType       = "ENSEMBL",     # Use Ensembl IDs
+  ont           = "MF",         # Analyze all GO categories: BP, MF, CC
+  pAdjustMethod = "BH",          # Benjamini-Hochberg adjustment
+  pvalueCutoff  = 0.01,          # FDR < 1%
+  minGSSize     = 5              # Minimum gene set size
+)
+```
+# qvalueCutoff  = 0.05
+```{r}
 ```
