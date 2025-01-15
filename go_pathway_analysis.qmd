@@ -1,0 +1,143 @@
+---
+title: "Lets_GO"
+format: html
+editor: visual
+---
+
+## Pathway Enrichment Analysis for Zhu et al.
+
+Recapitulation of 2015 Nature paper from Zhu et al. showing that p53 missense mutation R273H shows upregulation of ribosomal activity, suggestion link between p53 and eIF6 for therapeutic investigation.
+
+```{r}
+library(GenomicFeatures)
+library(TxDb.Hsapiens.UCSC.hg18.knownGene)  # Use hg18 as specified in the paper
+library(ChIPseeker)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(rtracklayer)
+library(biomaRt)
+
+# Define the path to the bedGraph file
+bedgraph_file <- "/home/surya/data/20241211_jian-GO-enrich/archive/raw/GSE59176/GSM1429755_MDA468ChIP.ucsc.bedGraph.gz"
+
+# Import the bedGraph as a GRanges object
+granges_boi <- import(bedgraph_file, genome = "hg18", format = "bedGraph")
+
+# Define TxDb for hg18
+txdb <- TxDb.Hsapiens.UCSC.hg18.knownGene
+
+# Define promoter regions (1000 bp upstream and downstream of TSS)
+promoters <- getPromoters(TxDb = txdb, upstream = 200, downstream = 200)
+
+promoters <- unique(promoters)
+granges_boi <- unique(granges_boi)
+
+# Find overlaps between peaks and promoters
+peak_promoter_overlap <- subsetByOverlaps(promoters, granges_boi)
+overlapping_promoters <- subsetByOverlaps(granges_boi, promoters)
+filtered_df_top <- overlapping_promoters[order(overlapping_promoters$score,decreasing=TRUE)][1:1000]
+# dos_filtered_df_top <- peak_promoter_overlap[order(peak_promoter_overlap$score,decreasing=TRUE)][1:1000]
+# Annotate peaks with TSS proximity and chromatin features
+peak_annotation <- annotatePeak(
+  filtered_df_top,
+  TxDb = txdb,
+  tssRegion = c(-200, 200),
+  annoDb = "org.Hs.eg.db"
+)
+```
+
+You can add options to executable code like this
+
+```{r}
+annot_peaks <- as.data.frame(peak_annotation)
+
+peak_anno_df <- annot_peaks
+# Filter rows where distanceToTSS is within ±200
+filtered_df <- peak_anno_df[abs(peak_anno_df$distanceToTSS) <= 200,]
+# filtered_df_top <- filtered_df[order(filtered_df$score,decreasing=TRUE)][1:1000]
+
+# Retrieve unique ENSEMBL values
+filtered_ensembl <- unique(filtered_df$SYMBOL[!is.na(filtered_df$SYMBOL)])
+
+# filtered_ensembl <- unique(filtered_df$geneId[!is.na(filtered_df$geneId)])
+
+# Filter for chromatin regulators (e.g., MLL1, MLL2, MOZ)
+# target_genes <- c("KMT2A", "KMT2D", "KAT6A")
+# filtered_df <- annot_peaks[annot_peaks$SYMBOL %in% target_genes, ]
+
+# Ensure ENTREZ IDs are unique and non-missing
+# unique_gene_ids <- unique(filtered_ensembl)
+# unique_gene_ids <- as.integer(unique_gene_ids[!is.na(unique_gene_ids)])
+
+# Set up Ensembl BioMart for hg18
+# mart <- useMart(
+#   "ENSEMBL_MART_ENSEMBL",
+#   dataset = "hsapiens_gene_ensembl",
+#   host = "https://ncbi36.ensembl.org"
+# )
+# 
+# # Retrieve additional gene information
+# results <- getBM(
+#   attributes = c("entrezgene", "hgnc_symbol"),
+#   filters = "entrezgene",
+#   values = unique_gene_ids,
+#   mart = mart
+# )
+# 
+# Perform GO enrichment analysis on filtered genes
+go_enrichment <- enrichGO(
+  gene          = filtered_ensembl,
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "SYMBOL",
+  ont           = "ALL",
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.01,
+  minGSSize     = 5
+)
+
+# View and save the GO enrichment results
+print(summary(go_enrichment))
+write.csv(as.data.frame(go_enrichment), "GO_enrichment_results.csv")
+
+# Optional: Visualize GO enrichment
+dotplot(go_enrichment)
+
+```
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(stringr)
+
+# Assuming go_enrichment is a data frame with FoldEnrichment and Description columns
+go_results <- as.data.frame(go_enrichment)
+
+# Select top 10 GO terms by Fold Enrichment
+top_n <- 10
+top_go_terms <- go_results %>%
+  arrange(desc(FoldEnrichment)) %>%  # Order by FoldEnrichment (largest to smallest)
+  slice_head(n = top_n)  # Take the top 10
+
+# Wrap long descriptions for better readability
+top_go_terms$Description <- str_wrap(top_go_terms$Description, width = 30)
+
+# Plot using ggplot2
+ggplot(top_go_terms, aes(x = FoldEnrichment, y = reorder(Description, FoldEnrichment))) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  labs(
+    title = "Top GO Terms by Fold Enrichment",
+    x = "Fold Enrichment",
+    y = "GO Term Description"
+  ) +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12)
+  )
+
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
